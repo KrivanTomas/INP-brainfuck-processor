@@ -53,7 +53,12 @@ architecture behavioral of cpu is
     -- finite state machine
     type fsm_state is (
         RST, INIT, INIT_FIX, FETCH1, FETCH2, HALT, NOP, RIGHT, LEFT, ADD1, ADD2, SUB1, SUB2,
-        WRITE1, WRITE2, WRITE_BUSY, READ, START_WHILE, END_WHILE, SKIP_WHILE, START_DO_WHILE, END_DO_WHILE, IMM, ZERO
+        WRITE1, WRITE2, WRITE_BUSY, READ, READ_END, IMM, ZERO,
+        START_WHILE, END_WHILE, W_CHK, EW_CHK, W_IN, 
+        W_SKIP, WS_INC, WS_DEC, WS_CHK, WS_END,
+        W_BACK, WB_INC, WB_DEC, WB_CHK, WB_CONTINUE1, WB_CONTINUE2, W_OUT1, W_OUT2,
+        START_DO_WHILE, END_DO_WHILE, EDW_CHK,
+        DW_BACK, DWB_INC, DWB_DEC, DWB_CHK, DWB_CONTINUE1, DWB_CONTINUE2, DW_OUT1, DW_OUT2
     );
     signal state : fsm_state := RST;
     signal next_state : fsm_state := RST;
@@ -129,21 +134,25 @@ begin
             when INIT_FIX =>
                 ptr_dec <= '1';
             when FETCH1 =>
-                pc_inc <= '1';
                 DATA_RDWR <= '1';
                 addr_sel <= '1';
                 DATA_EN <= '1';
+            when FETCH2 =>
+                pc_inc <= '0';
             when HALT =>
                 DONE <= '1';
             when RIGHT =>
+                pc_inc <= '1';
                 ptr_inc <= '1';
             when LEFT =>
+                pc_inc <= '1';
                 ptr_dec <= '1';
             when ADD1 =>
                 DATA_RDWR <= '1';
                 addr_sel <= '0';
                 DATA_EN <= '1';
             when ADD2 =>
+                pc_inc <= '1';
                 DATA_RDWR <= '0';
                 addr_sel <= '0';
                 data_sel <= "11";
@@ -153,16 +162,20 @@ begin
                 addr_sel <= '0';
                 DATA_EN <= '1';
             when SUB2 =>
+                pc_inc <= '1';
                 DATA_RDWR <= '0';
                 addr_sel <= '0';
                 data_sel <= "10";
                 DATA_EN <= '1';
             when READ =>
                 IN_REQ <= '1';
+            when READ_END =>
+                IN_REQ <= '1';
                 DATA_RDWR <= '0';
                 addr_sel <= '0';
                 data_sel <= "00";
                 DATA_EN <= '1';
+                pc_inc <= '1';
             when WRITE1 =>
                 DATA_RDWR <= '1';
                 addr_sel <= '0';
@@ -173,21 +186,91 @@ begin
                 addr_sel <= '0';
                 DATA_EN <= '1';
             when WRITE2 =>
-                OUT_WE <= '1';
-            when START_WHILE =>
-                DATA_RDWR <= '1';
-                addr_sel <= '0';
-                DATA_EN <= '1';
-            when SKIP_WHILE =>
                 pc_inc <= '1';
+                OUT_WE <= '1';
             when IMM =>
+                pc_inc <= '1';
                 DATA_RDWR <= '0';
                 addr_sel <= '0';
                 data_sel <= "01";
                 DATA_EN <= '1';
+            when START_WHILE =>
+                DATA_RDWR <= '1';
+                addr_sel <= '0';
+                DATA_EN <= '1';
+            when W_CHK =>
+                pc_inc <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when W_SKIP =>
+                pc_inc <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when WS_INC =>
+                loop_inc <= '1';
+            when WS_DEC =>
+                loop_dec <= '1';
+            when WS_CHK =>
+                pc_inc <= '0';
+            when WS_END =>
+                pc_dec <= '1';
+            when END_WHILE =>
+                DATA_RDWR <= '1';
+                addr_sel <= '0';
+                DATA_EN <= '1';
+            when EW_CHK => 
+                pc_dec <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when W_BACK =>
+                pc_dec <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when WB_INC =>
+                loop_inc <= '1';
+            when WB_DEC =>
+                loop_dec <= '1';
+            when WB_CHK =>
+                pc_inc <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+
+
+
+            when END_DO_WHILE =>
+                DATA_RDWR <= '1';
+                addr_sel <= '0';
+                DATA_EN <= '1';
+            when EDW_CHK => 
+                pc_dec <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when DW_BACK =>
+                pc_dec <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+            when DWB_INC =>
+                loop_inc <= '1';
+            when DWB_DEC =>
+                loop_dec <= '1';
+            when DWB_CHK =>
+                pc_inc <= '1';
+                DATA_RDWR <= '1';
+                addr_sel <= '1';
+                DATA_EN <= '1';
+        
+                
 
             when others =>
                 READY <= '1';
+                pc_inc <= '1';
         end case;
         
     end process;
@@ -228,7 +311,7 @@ begin
             when READ =>
                 next_state <= READ;
                 if(IN_VLD='1') then
-                    next_state <= FETCH1;
+                    next_state <= READ_END;
                 end if;
             when WRITE1 =>
                 next_state <= WRITE1;
@@ -242,16 +325,87 @@ begin
                 if(OUT_BUSY='0') then
                     next_state <= WRITE2;
                 end if;     
+
             when START_WHILE =>
+                next_state <= W_CHK;
+            when W_CHK =>
                 next_state <= FETCH1;
                 if(instr=ZERO) then
-                    next_state <= SKIP_WHILE;
+                    next_state <= W_SKIP;
                 end if;
-            when SKIP_WHILE => 
-                next_state <= SKIP_WHILE;
+            when W_SKIP =>
+                next_state <= W_SKIP;
+                if(instr=START_WHILE) then
+                    next_state <= WS_INC;
+                elsif(instr=END_WHILE) then
+                    next_state <= WS_DEC;
+                end if;
+            when WS_INC =>
+                next_state <= W_SKIP;
+            when WS_DEC =>
+                next_state <= WS_CHK;
+            when WS_CHK =>
+                next_state <= W_SKIP;
                 if(loop_cmp='1') then
-                    next_state <= FETCH1;
+                    next_state <= WS_END;
                 end if;
+
+            when END_WHILE =>
+                next_state <= EW_CHK;
+            when EW_CHK =>
+                next_state <= W_OUT1;
+                if(instr/=ZERO) then
+                    next_state <= W_BACK;
+                end if;
+            when W_BACK =>
+                next_state <= W_BACK;
+                if(instr=END_WHILE) then
+                    next_state <= WB_INC;
+                elsif(instr=START_WHILE) then
+                    next_state <= WB_DEC;
+                end if;
+            when WB_INC =>
+                next_state <= W_BACK;
+            when WB_DEC =>
+                next_state <= WB_CHK;
+            when WB_CHK =>
+                next_state <= W_BACK;
+                if(loop_cmp='1') then
+                    next_state <= WB_CONTINUE1;
+                end if;
+            when WB_CONTINUE1 =>
+                next_state <= WB_CONTINUE2;
+            when W_OUT1 =>
+                next_state <= W_OUT2;
+
+            when END_DO_WHILE =>
+                next_state <= EDW_CHK;
+            when EDW_CHK =>
+                next_state <= DW_OUT1;
+                if(instr/=ZERO) then
+                    next_state <= DW_BACK;
+                end if;
+            when DW_BACK =>
+                next_state <= DW_BACK;
+                if(instr=END_DO_WHILE) then
+                    next_state <= DWB_INC;
+                elsif(instr=START_DO_WHILE) then
+                    next_state <= DWB_DEC;
+                end if;
+            when DWB_INC =>
+                next_state <= DW_BACK;
+            when DWB_DEC =>
+                next_state <= DWB_CHK;
+            when DWB_CHK =>
+                next_state <= DW_BACK;
+                if(loop_cmp='1') then
+                    next_state <= DWB_CONTINUE1;
+                end if;
+            when DWB_CONTINUE1 =>
+                next_state <= DWB_CONTINUE2;
+            when DW_OUT1 =>
+                next_state <= DW_OUT2;
+
             when others =>
                 next_state <= FETCH1;
         end case;
