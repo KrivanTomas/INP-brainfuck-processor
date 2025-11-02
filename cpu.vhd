@@ -181,7 +181,6 @@ begin
                 addr_sel <= '0';
                 DATA_EN <= '1';
             when WRITE_BUSY =>
-                OUT_INV <= '1';
                 DATA_RDWR <= '1';
                 addr_sel <= '0';
                 DATA_EN <= '1';
